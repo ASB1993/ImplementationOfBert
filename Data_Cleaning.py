@@ -17,6 +17,7 @@ def cleanData(textFile):
         text = file.read()
         file.close()
 
+
     # strip html, remove between square brackets and denoise text
     text = denoise_text(text)
     #print(text)
@@ -46,7 +47,7 @@ def cleanData(textFile):
         resTex = resTex + new_text[middleEnd:end]"""
 
     """remove blank lines"""
-    re.sub(r'\n\s*\n', '\n\n', text)
+    #re.sub(r'\n\s*\n', '', text)
 
     """use of cleantext library"""
     cleantext.clean(text)
