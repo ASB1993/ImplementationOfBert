@@ -13,8 +13,8 @@
 """
 
 
-import logging
-logging.basicConfig(level=logging.INFO)
+#import logging
+#logging.basicConfig(level=logging.INFO)
 import sys
 import os
 import torch
@@ -23,6 +23,8 @@ import Data_Cleaning
 import cleantext
 import PyPDF2
 import textract
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 string = ''
 question = ''
@@ -116,22 +118,103 @@ def question_answering(questionString):
 
     # question and text are encoded to numbers by the tokenizer
     input_ids = tokenizer.encode(question, text)
-    #print(input_ids)
-    # all tokens receive a 1. Since the matrix consists of the text, all rows represent one sentence. For shorter sentences, the parts that remain empty are filled with a 0
-    token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))]
-    #print(token_type_ids)
-    # start_scores and end_scores represent the predictions made by the model
+    print("input ids", input_ids)
+    print('The input has a total of {:} tokens.'.format(len(input_ids)))
+    # all tokens  that belong to the question receive a 0, all tokens that belong to the paragraph receives a 1
+    token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))] # segment embeddings
+    print("token type ids", token_type_ids)
+    # start_scores and end_scores represent the questions and the context paragraph that are now run through the model
     start_scores, end_scores = model(torch.tensor([input_ids]), token_type_ids=torch.tensor([token_type_ids]))
-    #print(start_scores)
-    #print(end_scores)
 
+
+    # all ids are converted back into token strings, but how are the words
     all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+
+    # For each token and its id...
+    for token, id in zip(all_tokens, input_ids):
+
+        # If this is the [SEP] token, add some space around it to make it stand out.
+        if id == tokenizer.sep_token_id:
+            print('')
+
+        # Print the token string and its ID in two columns.
+        print('{:<12} {:>6,}'.format(token, id))
+
+        if id == tokenizer.sep_token_id:
+            print('')
+
     # the start_scores and end_scores which would give the highest maximum are taken as an answer and since,
     # in the output-layer, all tokens are shifted to the right by one, +1 is needed, since we don't want this token,
     # but the one beside it. tokens are then put together and displayed as an answer
     answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
-    print(answer)
+
     #assert answer == "going to a restaurant"
+
+
+    # just for demonstration purposes
+    # we read the calculations of the highest probabilities of the start and end scores in separate variables to save it
+    answer_start = torch.argmax(start_scores)
+    answer_end = torch.argmax(end_scores)
+
+    print("answer start", answer_start)
+    print("answer end", answer_end)
+    # Start with the first token.
+    answer = all_tokens[answer_start]
+
+    # Select the remaining answer tokens and join them with whitespace.
+    for i in range(answer_start + 1, answer_end + 1):
+
+        # If it's a subword token, then recombine it with the previous token.
+        if all_tokens[i][0:2] == '##':
+            answer += all_tokens[i][2:]
+
+        # Otherwise, add a space then the token.
+        else:
+            answer += ' ' + all_tokens[i]
+
+    print(answer)
+
+
+    # Use plot styling from seaborn.
+    sns.set(style='darkgrid')
+
+    # Increase the plot size and font size.
+    # sns.set(font_scale=1.5)
+    plt.rcParams["figure.figsize"] = (16, 8)
+    # Pull the scores out of PyTorch Tensors and convert them to 1D numpy arrays.
+    s_scores = start_scores.detach().numpy().flatten()
+    e_scores = end_scores.detach().numpy().flatten()
+
+    # We'll use the tokens as the x-axis labels. In order to do that, they all need
+    # to be unique, so we'll add the token index to the end of each one.
+    token_labels = []
+    for (i, token) in enumerate(all_tokens):
+        token_labels.append('{:} - {:>2}'.format(token, i))
+    # Create a barplot showing the start word score for all of the tokens.
+    ax = sns.barplot(x=token_labels, y=s_scores, ci=None)
+
+    # Turn the xlabels vertical.
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=90, ha="center")
+
+    # Turn on the vertical grid to help align words to scores.
+    ax.grid(True)
+
+    plt.title('Start Word Scores')
+
+    plt.show()
+
+    # Create a barplot showing the end word score for all of the tokens.
+    ax = sns.barplot(x=token_labels, y=e_scores, ci=None)
+
+    # Turn the xlabels vertical.
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=90, ha="center")
+
+    # Turn on the vertical grid to help align words to scores.
+    ax.grid(True)
+
+    plt.title('End Word Scores')
+
+    plt.show()
 
 if __name__ == "__main__":
 
@@ -154,3 +237,4 @@ if __name__ == "__main__":
     # total time it has taken for the program to answer the question
     total = t1 - t0
     print(total)
+
